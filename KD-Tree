@@ -1,0 +1,170 @@
+from typing import List
+from collections import namedtuple
+import time
+
+
+class Point(namedtuple("Point", "x y")):
+    def __repr__(self) -> str:
+        return f'Point{tuple(self)!r}'
+
+class Rectangle(namedtuple("Rectangle", "lower upper")):
+    def __repr__(self) -> str:
+        return f'Rectangle{tuple(self)!r}'
+
+    def is_contains(self, p: Point) -> bool:
+        return self.lower.x <= p.x <= self.upper.x and self.lower.y <= p.y <= self.upper.y
+
+class Node(namedtuple("Node", "location left right")):
+    """
+    location: Point
+    left: Node
+    right: Node
+    """
+
+    def __repr__(self):
+        return f'{tuple(self)!r}'
+
+class KDTree:
+    """k-d tree"""
+
+    def __init__(self):
+        self._root = None
+        self._n = 0
+
+    def insert(self, p: List[Point]):
+        """insert a list of points"""
+        if not p :
+            return None
+        def ist(k = 0 , l = list):
+            if not l :
+                return None
+            axis = k % 2
+            if axis == 0:
+                l.sort(key = lambda x : x.x)
+            else:
+                l.sort(key = lambda x : x.y)
+            mid = len(l)//2
+            return Node(l[mid],ist(k+1,l[:mid]),ist(k+1,l[mid+1:]))
+        self._root = ist(self._n,p)
+        
+    def range(self, rectangle: Rectangle) -> List[Point]:
+        """range query"""
+        l = []
+        def ran( rec = Rectangle, node = Node, k = 0):
+            if not node:
+                return
+            axis = k % 2
+            if axis == 0:
+                if rec.lower.x <= node.location.x <= rec.upper.x and rec.lower.y <= node.location.y <= rec.upper.y:
+                    l.append(node.location)
+                if rec.lower.x > node.location.x:
+                    ran(rec,node.right,k+1)
+                if rec.upper.x < node.location.x:
+                    ran(rec,node.left,k+1)
+                if rec.lower.x <= node.location.x <= rec.upper.x:
+                    ran(rec,node.right,k+1)
+                    ran(rec,node.left,k+1)        
+            else:
+                if rec.lower.x <= node.location.x <= rec.upper.x and rec.lower.y <= node.location.y <= rec.upper.y:
+                    l.append(node.location)
+                if rec.lower.y > node.location.y:
+                    ran(rec,node.right,k+1)
+                if rec.upper.y < node.location.y:
+                    ran(rec,node.left,k+1)
+                if rec.lower.y <= node.location.y <= rec.upper.y:
+                    ran(rec,node.right,k+1)
+                    ran(rec,node.left,k+1)
+                    
+        ran(rectangle,self._root,k=0)
+        return l
+    def NNs(self,p = Point):
+        father = None
+        cur = self._root
+        p_b_father = None
+        p_b = self._root
+        p_b_d = (self._root.location.x-p.x) ** 2 + (self._root.location.y-p.y)**2
+        k = 0
+        while not cur:
+            axis = k % 2
+            d_c = (cur.location.x-p.x) ** 2 + (cur.location.y-p.y)**2
+            if d_c < p_b_d:
+                p_b = cur
+                p_b_d = d_c
+            if axis == 0:
+                if p_b.left is None or p_b.right is None:
+                    break
+                else:
+                    if p_b.location.y >= cur.location.y:
+                        father = cur
+                        cur = cur.right
+                    if p_b.location.y < cur.location.y:
+                        father = cur
+                        cur = cur.left
+            else:
+                if p_b.left is None or p_b.right is None:
+                    break
+                else:
+                    if p_b.location.y >= cur.location.y:
+                        father = cur
+                        cur = cur.right
+                    if p_b.location.y < cur.location.y:
+                        father = cur
+                        cur = cur.left
+        a,b,c,d,e = 2**1024,2**1024,2**1024,2**1024,2**1024
+        if self._root is None:
+            return None
+        if (self._root.location.x-p.x) ** 2 + (self._root.location.y-p.y)**2 == p_b:
+            return self._root.location
+        if p_b.left is not None:
+            a = p_b.left.location.x ** 2 + p_b.left.location.y ** 2
+        if p_b.right is None:
+            b = p_b.right.location.x ** 2 + p_b.right.location.y ** 2 
+        if p_b_father is not None:
+            c = p_b_father.location.x ** 2 + p_b_father.location.y ** 2
+            if p_b_father.left is None:
+                d = p_b_father.left.location.x ** 2 + p_b_father.left.location.y ** 2
+            if p_b_father.right is not None:
+                e = p_b_father.right.location.x ** 2 + p_b_father.right.location.y ** 2
+        if c == min(a,b,c,d,e):
+            return p_b_father.location
+        if a == min(a,b,c,d,e):
+            return p_b.left.location
+        if b == min(a,b,c,d,e):
+            return p_b.right.location
+        if d == min(a,b,c,d,e):
+            return p_b_father.left.location
+        if e == min(a,b,c,d,e):
+            return p_b_father.right.location                  
+
+def range_test():
+    points = [Point(7, 2), Point(5, 4), Point(9, 6), Point(4, 7), Point(8, 1), Point(2, 3)]
+    kd = KDTree()
+    kd.insert(points)
+    result = kd.range(Rectangle(Point(0, 0), Point(6, 6)))
+    assert sorted(result) == sorted([Point(2, 3), Point(5, 4)])
+
+def performance_test():
+    points = [Point(x, y) for x in range(1000) for y in range(1000)]
+
+    lower = Point(500, 500)
+    upper = Point(504, 504)
+    rectangle = Rectangle(lower, upper)
+    #  naive method
+    start = int(round(time.time() * 1000))
+    result1 = [p for p in points if rectangle.is_contains(p)]
+    end = int(round(time.time() * 1000))
+    print(f'Naive method: {end - start}ms')
+
+    kd = KDTree()
+    kd.insert(points)
+    # k-d tree
+    start = int(round(time.time() * 1000))
+    result2 = kd.range(rectangle)
+    end = int(round(time.time() * 1000))
+    print(f'K-D tree: {end - start}ms')
+
+    assert sorted(result1) == sorted(result2)
+
+if __name__ == '__main__':
+    range_test()
+    performance_test()
